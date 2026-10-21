@@ -1,0 +1,11 @@
+{
+    "Fraud approved": 200.0,
+    "Fraud reviewed": 271.0,
+    "Fraud escalated": 609.0,
+    "Fraud routed": 880.0,
+    "Fraud coverage (%)": 81.48148148148148,
+    "Escalation precision (%)": 96.66666666666667,
+    "Intervention precision (%)": 50.984936268829664,
+    "Intervention rate (%)": 1.7239829399602464,
+    "Legitimate interventions": 846.0
+}
