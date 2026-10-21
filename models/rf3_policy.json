@@ -1,0 +1,34 @@
+{
+    "model_name": "RF-3",
+    "features": [
+        "amount",
+        "category"
+    ],
+    "positive_class": 1,
+    "lower_threshold": 0.07635097141364822,
+    "upper_threshold": 0.5731998416519604,
+    "actions": {
+        "Approve": "p < lower_threshold",
+        "Review": "lower_threshold <= p < upper_threshold",
+        "Escalate": "p >= upper_threshold"
+    },
+    "threshold_source": "chronological_validation",
+    "training_steps": [
+        0,
+        125
+    ],
+    "validation_steps": [
+        126,
+        152
+    ],
+    "test_steps": [
+        153,
+        179
+    ],
+    "model_parameters": {
+        "n_estimators": 200,
+        "max_depth": 10,
+        "min_samples_leaf": 20,
+        "random_state": 42
+    }
+}
