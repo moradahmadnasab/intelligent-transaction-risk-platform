@@ -1,0 +1,6 @@
+amount,category,fraud_risk_score,recommended_action
+11.06,'es_transportation',9.350012208432721e-05,Approve
+33.88,'es_hyper',0.015851683412260807,Approve
+20.42,'es_transportation',9.350012208432721e-05,Approve
+20.06,'es_transportation',9.350012208432721e-05,Approve
+39.58,'es_transportation',9.350012208432721e-05,Approve
