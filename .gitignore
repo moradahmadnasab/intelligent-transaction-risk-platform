@@ -1,0 +1,28 @@
+
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Local environments
+.venv/
+venv/
+env/
+
+# Editor and system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local logs and temporary files
+*.log
+*.tmp
+
+# Raw datasets (document acquisition separately)
+data/raw/*.csv
+
+# Local model artifacts (share separately if desired)
+models/*.joblib
+
+
