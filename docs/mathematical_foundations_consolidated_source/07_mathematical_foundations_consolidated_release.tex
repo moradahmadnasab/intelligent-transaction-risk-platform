@@ -1,0 +1,887 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=25mm]{geometry}
+\usepackage[T1]{fontenc}\usepackage[utf8]{inputenc}\usepackage{lmodern,microtype}
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm,booktabs,longtable,array}
+\usepackage{xcolor,hyperref,listings,fancyhdr,graphicx,float,placeins,tikz}
+\hypersetup{colorlinks=true,linkcolor=blue!55!black,citecolor=blue!55!black,urlcolor=blue!55!black,pdfauthor={Morad Ahmadnasab},pdftitle={Mathematical Foundations of Transaction Fraud-Risk Modeling: A BankSim Case Study}}
+\definecolor{codebg}{RGB}{246,247,249}
+\lstdefinestyle{python}{language=Python,basicstyle=\ttfamily\scriptsize,backgroundcolor=\color{codebg},frame=single,breaklines=true,showstringspaces=false,columns=fullflexible,keepspaces=true,upquote=true}
+\lstset{style=python}
+\newtheorem{proposition}{Proposition}[section]\newtheorem{remark}{Remark}[section]
+\newcommand{\E}{\mathbb E}\newcommand{\Pp}{\mathbb P}\newcommand{\R}{\mathbb R}\newcommand{\ind}{\mathbf 1}\newcommand{\sig}{\sigma}
+% Short, nonoverlapping running heads; keep both sides inside the text width.
+\setlength{\headheight}{16pt}
+\setlength{\headsep}{10mm}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\nouppercase{Fraud-Risk Modeling: Mathematical Foundations}}
+\fancyhead[R]{\small\nouppercase{Technical Report}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\thepage}\renewcommand{\headrulewidth}{0pt}}
+\title{\textbf{Mathematical Foundations of Transaction Fraud-Risk Modeling: A BankSim Case Study}\\[5pt]\large Derivations, Decision Theory, Validation Evidence, and Deployment\\ A Companion to the Complete CRISP-DM Project}
+\author{\textbf{Morad Ahmadnasab}\\[5pt]Intelligent Transaction Risk \& Fraud Detection Platform --- A BankSim Case Study}
+\date{Technical Report --- October 2026}
+\begin{document}\maketitle
+\begin{abstract}
+This technical report presents a reproducible BankSim case study of supervised,
+imbalanced binary transaction-fraud classification and subsequent selective
+intervention. Following the six-phase CRISP-DM framework, we examine
+time-indexed synthetic transactions, fit a Logistic Regression baseline and
+six Random Forest configurations using transaction amount and category, and
+compare discrimination, probability quality, and operational consequences.
+The methodological decisions are linked to the predictor types, the binary
+target, chronological validation, class imbalance, and the distinction
+between estimated risk and chosen action. RF-3 was selected for its highest
+validation Average Precision (0.807737), although RF-2 obtained lower
+validation Brier score and log loss. With model and two action thresholds
+frozen before testing, RF-3 achieved test Average Precision 0.804028 and
+ROC-AUC 0.992570. The resulting Approve/Review/Escalate policy routed
+880 of 1,080 labeled fraud transactions (81.48\%) to intervention while
+assigning 1,726 of 100,117 transactions (1.72\%) to Review or Escalate.
+We provide mathematical derivations, notebook-linked experimental evidence,
+and a reproducible inference workflow. These findings concern synthetic
+BankSim data and do not demonstrate real-world calibration, prevention
+effectiveness, financial savings, or production readiness.
+\end{abstract}
+\tableofcontents\newpage
+\section{Modeling objectives and experimental design}
+\noindent\textit{Project correspondence: modeling notebook Sections 4.1--4.2. The section numbers in this companion are independent of notebook numbering.}
+
+\subsection{From a business question to a statistical problem}
+\paragraph{Project methodology and data source.}
+This project follows the six phases of the Cross-Industry Standard Process for Data Mining
+(CRISP-DM): business understanding, data understanding, data preparation, modeling,
+evaluation, and deployment \cite{chapman2000}. The phase-specific objectives, decisions,
+and deliverables are documented in \texttt{docs/01\_business\_understanding.md}
+through \texttt{docs/06\_deployment.md}; the present companion focuses on the
+mathematical methods and verified experimental findings. BankSim is a synthetic
+bank-payment simulation dataset developed for fraud-detection research
+\cite{lopezrojas2014}. Its generated labels and distributions must not be assumed
+representative of operational banking data.
+
+A transaction arrives with recorded amount $A$ and category $G$. Its unknown eventual fraud status is the response $Y\in\{0,1\}$, where $Y=1$ means fraud. In the notation of \emph{An Introduction to Statistical Learning with Applications in Python} (ISLP), $X=(A,G)$ is the predictor vector, and the object of interest is
+\begin{equation}\label{eq:target}p(X)=\Pp(Y=1\mid X),\qquad \hat p(X)\text{ is an estimate of }p(X).\end{equation}
+This is \emph{binary supervised classification}, because the observed response has two labels. It is not a three-class classification task: approve, review, and escalate are prospective \emph{actions} produced by a downstream policy, not observed BankSim training labels. The distinction between estimating an unknown conditional probability and choosing an action is central to statistical decision theory \cite{berger1985}.
+
+\subsection{Statistical learning, estimation, and generalization}
+Let $\mathcal D_{\mathrm{train}}=\{(X_i,Y_i)\}_{i=1}^{n}$, with $n=396{,}332$. A learning algorithm uses this sample to construct $\hat p$. Good in-sample fit is not the same as good future prediction: the relevant question is how $\hat p$ behaves on transactions not used to fit it. We therefore distinguish training (parameter estimation), validation (development and comparison), and test (final, untouched evaluation) \cite[Chs.~2,5]{james2023}.
+
+\begin{center}\begin{tabular}{lrrrr}\toprule
+Partition & Steps & Transactions & Fraud & Prevalence\\\midrule
+Training & 0--125 & 396,332 & 5,040 & 1.271661\%\\
+Validation & 126--152 & 98,194 & 1,080 & 1.099864\%\\
+Test & 153--179 & 100,117 & 1,080 & 1.078738\%\\\bottomrule
+\end{tabular}\end{center}
+\begin{figure}[H]\centering
+\begin{tikzpicture}[x=0.075cm,y=1cm]
+\fill[blue!18] (0,0) rectangle (126,.45);
+\fill[orange!25] (126,0) rectangle (153,.45);
+\fill[green!23] (153,0) rectangle (180,.45);
+\draw (0,0) rectangle (180,.45);
+\draw (126,0)--(126,.45);\draw (153,0)--(153,.45);
+\node at (63,.23) {Training};\node[font=\scriptsize] at (139.5,.23) {Validation};\node[font=\scriptsize] at (166.5,.23) {Test};
+\node[below] at (0,0) {0};\node[below] at (126,0) {126};\node[below] at (153,0) {153};\node[below] at (180,0) {180};
+\end{tikzpicture}
+\caption{Chronological simulation-step partitions. Labels at 126, 153, and 180 denote partition boundaries; the final observed step is 179.}\label{fig:timeline}\end{figure}
+As shown in Figure~\ref{fig:timeline}, the fractions 70/15/15 arise from dividing the 180 simulation steps into 126/27/27 steps (exactly 70\%/15\%/15\%); they refer to \emph{simulation steps}, not transaction counts. Chronological partitioning prevents training on later steps when evaluating earlier ones; it does not establish that BankSim mimics real-time banking. Every simulation step has exactly 40 fraud cases, an artificial regularity. \emph{No code is required at this design stage}: these are design decisions preceding implementation.
+
+
+\subsection{Problem taxonomy, objectives, and methodological scope}
+The observed response is a \emph{labeled binary outcome}; hence the
+learning task is supervised classification, not unsupervised anomaly
+detection. Estimating $p(x)=\mathbb P(Y=1\mid X=x)$ is a related
+probabilistic prediction task, whereas selecting an intervention is a
+\emph{decision problem} with different potential errors and operational
+costs \cite{james2023,berger1985}. The data are mixed-type tabular
+records (numerical amount and categorical merchant category), heavily
+imbalanced, and indexed by simulation step. They are not a verified
+sample of live financial transactions \cite{lopezrojas2014}.
+The three actions are \emph{not} three target classes: they are
+post-prediction policy choices.
+
+The statistical aim is to estimate scores that rank and, as far as
+the data permit, quantify fraud risk. The operational aim is to route
+higher-risk transactions for human review or escalation with limited
+intervention workload. These aims are related but not equivalent:
+good ranking does not guarantee calibrated probabilities, and a
+high-performing classifier does not itself specify an optimal
+cost-sensitive decision policy \cite{gneiting2007,berger1985}.
+Our contribution is an integrated, documented implementation and
+evaluation of established methods on one synthetic dataset; we do
+not propose a novel classifier or claim deployment validation.
+
+\subsection{CRISP-DM: decisions, rationale, and evidence}
+CRISP-DM supplies a six-phase, iterative project structure
+\cite{chapman2000}, \emph{not} a prescription to choose Logistic
+Regression, Random Forests, or a 70/15/15 split. The following
+project-specific decisions connect the data and objectives to the
+methods actually implemented.
+
+\begin{enumerate}
+\item \textbf{Business understanding.}
+We formulated the task as prioritizing transactions for intervention,
+not simply maximizing overall classification accuracy. Rare fraud
+and unequal potential consequences motivate discrimination,
+workload, and decision-oriented measures (Sections~3--6).
+The operational costs are illustrative assumptions, not observed losses.
+\item \textbf{Data understanding.}
+We examined transaction counts, label prevalence, amount, category,
+and simulation steps. The complete synthetic sample contains
+594,643 transactions and 7,200 fraud labels. Low prevalence motivates
+precision--recall analysis alongside ROC analysis
+\cite{saito2015,fawcett2006}.
+\item \textbf{Data preparation.}
+We selected \texttt{amount} (numerical) and \texttt{category}
+(categorical) as a deliberately limited, auditable predictor set.
+One-hot encoding converts categories to numeric indicators;
+training-fitted standardization supports the Logistic Regression
+baseline. The chronological step split (126/27/27 of 180 steps)
+avoids training on later simulated steps when assessing earlier
+predictions. Its proportions are an experimental choice, not a
+universal CRISP-DM rule (Section~2).
+\item \textbf{Modeling.}
+We first fitted regularized Logistic Regression as a transparent
+probabilistic baseline for binary labels, then compared Random
+Forests to accommodate nonlinear and interaction effects without
+manually specifying them \cite{james2023,hastie2009,breiman2001}.
+Six forest configurations explore complexity control; this is
+a limited candidate comparison, not an exhaustive search (Section~7).
+\item \textbf{Evaluation.}
+We used validation Average Precision as the primary selection
+criterion, with ROC-AUC, Brier score, log loss, and reliability
+diagrams as complementary evidence. The selected RF-3 and two
+thresholds were fixed before the reserved chronological test.
+Action counts and assumed-cost scenarios assess consequences of
+the \emph{policy}, not causal fraud prevention (Sections~5--8).
+\item \textbf{Deployment.}
+We saved the preprocessing-plus-model pipeline and a separate
+JSON policy, and checked standalone inference against notebook
+predictions on five examples. This demonstrates limited
+reproducibility, not production certification (Section~9).
+\end{enumerate}
+These phases were documented in the corresponding
+\texttt{docs/01\_business\_understanding.md} through
+\texttt{docs/06\_deployment.md} files. Each choice is conditional
+on the observed data and intended use: a different dataset,
+feature-availability constraint, intervention cost structure,
+or time-dependence may justify different methods and metrics.
+
+\section{Logistic regression baseline: mathematics before implementation}
+\subsection{The dataset, chronological split, and why order matters}
+\paragraph{Mathematical preparation.} Let $S_i\in\{0,\ldots,179\}$ denote the simulation step of transaction $i$. Define index sets
+\begin{align*}
+I_{\mathrm{tr}}&=\{i:S_i\le125\},\\
+I_{\mathrm{val}}&=\{i:126\le S_i\le152\},\\
+I_{\mathrm{te}}&=\{i:S_i\ge153\}.
+\end{align*}
+They are pairwise disjoint, their union is the entire sample, and their step ranges are ordered. No stratification or random shuffling is appropriate for reproducing our approved experiment. We use only the training predictor matrix $X_{\mathrm{tr}}$ and labels $Y_{\mathrm{tr}}$ to fit model parameters. \emph{Implementation:} the following is the first part of the original modeling notebook cell.
+\begin{lstlisting}
+from pathlib import Path
+
+import pandas as pd
+
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+
+# Load the original BankSim dataset
+DATA_PATH = Path("../data/raw/bs140513_032310.csv")
+df = pd.read_csv(DATA_PATH)
+
+# Define the approved baseline configuration
+BASELINE_FEATURES = ["amount", "category"]
+TARGET = "fraud"
+TIME_COLUMN = "step"
+
+# Reproduce the approved chronological partitions
+train_df = df.loc[df[TIME_COLUMN] <= 125].copy()
+
+valid_df = df.loc[
+    (df[TIME_COLUMN] >= 126)
+    & (df[TIME_COLUMN] <= 152)
+].copy()
+
+test_df = df.loc[df[TIME_COLUMN] >= 153].copy()
+
+# Verify consistency with Data Preparation
+assert len(df) == 594643
+assert len(train_df) == 396332
+assert len(valid_df) == 98194
+assert len(test_df) == 100117
+
+assert train_df[TIME_COLUMN].max() < valid_df[TIME_COLUMN].min()
+assert valid_df[TIME_COLUMN].max() < test_df[TIME_COLUMN].min()
+
+# Separate training predictors and target
+X_train = train_df[BASELINE_FEATURES].copy()
+y_train = train_df[TARGET].copy()
+\end{lstlisting}
+\paragraph{Interpretation.} The assertions check sample counts and chronological separation. They are consistency checks, not proofs that every conceivable leakage mechanism has been eliminated. Raw data remain unchanged. The relative path in the listing is resolved from the modeling notebook working directory (typically \texttt{notebooks/}), not from the directory containing this \LaTeX{} source.
+
+\subsection{Constructing predictors: scaling and category indicators}
+\paragraph{Choice of preprocessing.} The predictor \texttt{amount} is numerical, while \texttt{category} is nominal. One-hot encoding preserves category distinctions without imposing a fictitious numeric ordering; standardization puts the amount coefficient on a training-derived scale and helps numerical optimization of the regularized Logistic Regression baseline. Tree-based models do not generally require feature scaling, so this preprocessing is motivated primarily by the baseline and the common pipeline, not by a universal Random Forest requirement.
+\paragraph{Mathematical preparation.} We need a numerical design vector to fit logistic regression. For training amounts $A_1,\ldots,A_n$, define the training mean and population standard deviation
+\begin{equation}\label{eq:scale}
+\bar A_{\mathrm{tr}}=\frac1n\sum_{i=1}^n A_i,\qquad s_{\mathrm{tr}}=\left[\frac1n\sum_{i=1}^n(A_i-\bar A_{\mathrm{tr}})^2\right]^{1/2},\qquad Z_i=\frac{A_i-\bar A_{\mathrm{tr}}}{s_{\mathrm{tr}}}.
+\end{equation}
+Scikit-learn's \texttt{StandardScaler} uses denominator $n$, not the unbiased sample-variance denominator $n-1$ \cite{skstandard}. Assuming $s_{\mathrm{tr}}>0$, we have the following elementary guarantee.
+\begin{proposition}The transformed training values satisfy $n^{-1}\sum_i Z_i=0$ and $n^{-1}\sum_i Z_i^2=1$.\end{proposition}
+\begin{proof}The first follows from $\sum_i(A_i-\bar A_{\mathrm{tr}})=0$. The second follows immediately from the definition of $s_{\mathrm{tr}}^2$.\end{proof}
+For validation and test, use \emph{the same} training mean and standard deviation; otherwise evaluation would use information from the future partition. Their transformed means and standard deviations need not equal zero and one.
+
+The fitted preprocessing pipeline reports 16 transformed predictors: one scaled amount and 15 category indicators. This is evidence for 15 observed training categories; a direct reproducibility check is \texttt{train\_df["category"].nunique()} (expected result: 15). Let $g_1,\ldots,g_{15}$ be these training categories, and set $D_{ik}=\ind\{G_i=g_k\}$. The transformed row is
+\begin{equation}\label{eq:design}X_i=(Z_i,D_{i1},\ldots,D_{i,15})^\top\in\R^{16}.\end{equation}
+There is exactly one active indicator per row when the category is among those seen in training. \texttt{handle\_unknown="ignore"} produces all-zero category indicators for an unseen category \cite{skonehot}; none occurred in our validation or test partitions.
+
+\paragraph{An important identifiability subtlety.} With an intercept and all 15 indicators, $\sum_k D_{ik}=1$ makes the unregularized design linearly dependent. Coefficient values are not individually identifiable without constraints. Penalizing category coefficients by an $\ell_2$ term selects a representation, but the coefficient of one category alone should not be read as an unadjusted, uniquely identified category effect. For a change from category $g_j$ to $g_k$, the change in fitted log-odds is $\hat\beta_{k+1}-\hat\beta_{j+1}$ (assuming $\beta_1$ corresponds to amount).
+
+\subsection{Logistic regression: why this model, and what is estimated?}
+\paragraph{Model choice.} Logistic Regression provides a conventional, comparatively interpretable baseline for binary labels, with a smooth probabilistic score and a convex penalized fitting objective. Its additive linear-log-odds specification may miss nonlinear amount effects and category interactions, motivating the subsequent Random Forest comparison (Section~7). This is a modeling rationale, not a claim that Logistic Regression is universally preferable.
+\paragraph{Mathematical preparation.} Linear regression of $Y$ on $X$ could return values outside $[0,1]$. Logistic regression instead models the \emph{log-odds} as a linear function \cite[Ch.~4]{james2023}:
+\begin{equation}\label{eq:logit}
+\log\!\left(\frac{p(X)}{1-p(X)}\right)=\beta_0+\beta_1 Z+\sum_{k=1}^{15}\beta_{k+1}D_k=:\eta(X).
+\end{equation}
+Define the sigmoid (logistic) function $\sigma(u)=1/(1+e^{-u})$ for $u\in\mathbb R$. Solving algebraically for $p$ gives
+\begin{equation}\label{eq:logistic}p(X)=\frac{\exp(\eta(X))}{1+\exp(\eta(X))}=\frac{1}{1+\exp(-\eta(X))}=: \sig(\eta(X)).\end{equation}
+Since $e^{-\eta}>0$, the denominator in \eqref{eq:logistic} is strictly greater than one; hence $0<p(X)<1$. This verifies that the logistic link always produces a value in the open unit interval.
+\paragraph{Odds and odds ratios.}
+For $0<p<1$, the \emph{odds} are $p/(1-p)$, and their logarithm is the \emph{log-odds}. The odds ratio compares the odds at two predictor settings.
+\begin{proposition}[Odds-ratio interpretation]Holding all other design coordinates fixed, a feasible one-unit increase in a continuous predictor $X_j$ multiplies the modeled odds by $e^{\beta_j}$.\end{proposition}
+\begin{proof}Exponentiating \eqref{eq:logit} gives odds $\exp(\eta(X))$; adding one to $X_j$ adds $\beta_j$ to $\eta$ and multiplies odds by $e^{\beta_j}$.\end{proof}
+For $Z$, a one-unit increase means one \emph{training} standard deviation in amount. Switching categorical levels changes two indicator coordinates and thus requires comparing their coefficients.
+
+\subsection{Maximum likelihood, cross-entropy, regularization, and optimization}
+\paragraph{Mathematical preparation.} Under a conditional Bernoulli model, $Y_i\mid X_i\sim\mathrm{Bernoulli}(p_i)$, with $p_i=\sig(\eta_i)$, and assume the labels are conditionally independent given the observed predictors. The Bernoulli mass function assigns probability $p_i^{Y_i}(1-p_i)^{1-Y_i}$ to the observed label $Y_i$. Multiplying these terms gives the likelihood $L$, and taking its logarithm gives the log-likelihood $\ell$:
+\begin{align}
+L(\bm\beta)&=\prod_{i=1}^{n}p_i^{Y_i}(1-p_i)^{1-Y_i},\\
+\ell(\bm\beta)&=\sum_{i=1}^{n}\bigl[Y_i\log p_i+(1-Y_i)\log(1-p_i)\bigr].
+\end{align}
+Maximizing $\ell$ is equivalent to minimizing the negative log-likelihood, also called \emph{binary cross-entropy}:
+\begin{equation}\label{eq:loss}J(\bm\beta)=\sum_{i=1}^n\left[-Y_i\log p_i-(1-Y_i)\log(1-p_i)\right].\end{equation}
+Here $\bm\beta=(\beta_0,\beta_1,\ldots,\beta_{16})^\top$. Let $\tilde X$ be the $n\times17$ matrix whose first column is ones and remaining columns are the transformed features. To derive the derivatives, write the $i$th loss as
+$\log(1+e^{\eta_i})-Y_i\eta_i$, where
+$\eta_i=\tilde x_i^\top\bm\beta$.
+Its first derivative with respect to $\eta_i$ is $p_i-Y_i$ and its
+second derivative is $p_i(1-p_i)$, since
+$\partial p_i/\partial\eta_i=p_i(1-p_i)$. By the chain rule, summing over observations yields
+\begin{equation}\label{eq:gradient}\nabla J(\bm\beta)=\tilde X^\top(\bm p-\bm y),\qquad \nabla^2J(\bm\beta)=\tilde X^\top W\tilde X,\quad W=\operatorname{diag}(p_i(1-p_i)).\end{equation}
+\begin{proposition}[Convexity of the unpenalized logistic objective]$J$ is convex in $\bm\beta$.\end{proposition}
+\begin{proof}
+For any $v\in\mathbb R^{17}$ (including $v=0$),
+\[
+v^\top\nabla^2J(\bm\beta)v
+=(\tilde Xv)^\top W(\tilde Xv)
+=\sum_{i=1}^{n}p_i(1-p_i)(\tilde x_i^\top v)^2\ge0.
+\]
+Therefore the Hessian is positive semidefinite at every finite parameter
+vector, so $J$ is convex. Positive \emph{definiteness} would require a
+strict inequality for every nonzero $v$; it does not hold here because
+the intercept equals the sum of the category-indicator columns.
+\end{proof}
+The implemented \texttt{LogisticRegression} uses L2 regularization. Its settings are \texttt{C=1.0} and \texttt{class\_weight=None}, with the default L-BFGS solver \cite{sklogreg,nocedal2006}.\par\smallskip\noindent Conceptually, the fitted coefficients minimize logistic loss plus a positive multiple of $\sum_{j=1}^{16}\beta_j^2/2$, with the intercept unpenalized. In the unweighted binary case, scikit-learn's L-BFGS formulation can be written as
+\begin{equation}\label{eq:penalty}\min_{\beta_0,\ldots,\beta_{16}}\ \frac1nJ(\bm\beta)+\frac{1}{2Cn}\sum_{j=1}^{16}\beta_j^2.\end{equation}
+This normalization is equivalent to minimizing $J+\frac{1}{2C}\sum_j\beta_j^2$. It matters when comparing textbook regularization parameters $\lambda$ with software parameter $C$; do not assume $C=\lambda$. L2 regularization reduces sensitivity to some coefficient instabilities but does not guarantee correct probabilities, prevent all overfitting, or establish generalization.
+\begin{proposition}[Strict convexity of the implemented penalized objective]
+For $C>0$ and a nonempty training sample, the objective in
+\eqref{eq:penalty} is strictly convex in the intercept and all
+feature coefficients.
+\end{proposition}
+\begin{proof}
+Write $\bm\beta=(\beta_0,b)$, with $b\in\mathbb R^{16}$.
+For any nonzero direction $(a,u)\in\mathbb R\times\mathbb R^{16}$,
+the Hessian quadratic form is
+\[
+\frac1n\sum_{i=1}^n p_i(1-p_i)(a+X_i^\top u)^2
++\frac{1}{Cn}\lVert u\rVert_2^2.
+\]
+If $u\ne0$, the second term is strictly positive. If $u=0$,
+then $a\ne0$ and the first term is strictly positive because
+$0<p_i<1$. Thus the Hessian is positive definite at every finite
+parameter vector, implying strict convexity.
+\end{proof}
+Strict convexity ensures \emph{at most} one minimizer; existence
+also requires consideration. Here both outcome classes occur in
+training, and the penalized objective is coercive: the penalty
+controls $b$, while the loss diverges as $|\beta_0|\to\infty$
+with $b$ bounded. Consequently a unique finite minimizer exists.
+
+
+\paragraph{Implementation.} The next code is the remaining model-construction and training portion of our original modeling notebook cell. All mathematics above precedes its execution.
+\begin{lstlisting}
+preprocessor = ColumnTransformer(
+    transformers=[
+        ("numeric", StandardScaler(), ["amount"]),
+        (
+            "categorical",
+            OneHotEncoder(handle_unknown="ignore"),
+            ["category"]
+        )
+    ],
+    remainder="drop"
+)
+
+# Construct the complete estimator pipeline
+baseline_model = Pipeline(
+    steps=[
+        ("preprocessing", preprocessor),
+        (
+            "classifier",
+            LogisticRegression(
+                penalty="l2",
+                C=1.0,
+                class_weight=None,
+                max_iter=1000
+            )
+        )
+    ]
+)
+
+# Fit preprocessing and classifier on training data only
+baseline_model.fit(X_train, y_train)
+
+# Inspect the fitted model
+classifier = baseline_model.named_steps["classifier"]
+fitted_preprocessor = baseline_model.named_steps["preprocessing"]
+
+print("Training completed successfully.")
+print("Model:", type(classifier).__name__)
+print("Training observations:", len(X_train))
+print("Prepared feature count:",
+      len(fitted_preprocessor.get_feature_names_out()))
+print("Target classes:", classifier.classes_)
+print("Iterations used:", classifier.n_iter_)
+print("Maximum iterations:", classifier.max_iter)
+print("Coefficient matrix shape:", classifier.coef_.shape)
+print("Intercept shape:", classifier.intercept_.shape)
+\end{lstlisting}
+\paragraph{Observed output and interpretation.} Training completed on 396,332 transactions; there are 16 transformed features, classes $[0,1]$, coefficient shape $(1,16)$, intercept shape $(1,)$, and 16 solver iterations out of a maximum of 1,000. These values are consistent with the mathematical model and successful fitting. A low iteration count is \emph{not} a proof of predictive accuracy. The validation and test sets were not used in fitting.
+
+\section{Validation probabilities and ranking performance}
+\noindent\textit{Why these metrics?} With roughly one percent labeled fraud,
+overall accuracy could remain high for an unhelpful majority-class
+classifier. We therefore evaluate how well scores order positive
+cases (ROC-AUC and Average Precision), and separately how useful
+their numerical probability values are (Brier score, log loss, and
+reliability diagrams in Section~5). None of these alone fixes
+an operational action threshold \cite{fawcett2006,saito2015,gneiting2007}.
+
+\subsection{From a fitted model to a score}
+\paragraph{Mathematical preparation.} Given a new validation transaction $X_i$, apply the \emph{training-fitted} scaling and encoding, then calculate $\hat\eta_i=\hat\beta_0+\sum_{j=1}^{16}\hat\beta_jX_{ij}$ and $\hat p_i=\sig(\hat\eta_i)$. Because class labels are $[0,1]$, we must select the column of \texttt{predict\_proba} corresponding to class $1$. No classification threshold is needed to compare rankings.
+
+\subsection{ROC-AUC: definition and meaning}
+For a threshold $t$, define $\widehat Y_i(t)=\ind\{\hat p_i\ge t\}$,
+where fraud ($Y_i=1$) is the positive class. On the evaluation set,
+$\mathrm{TP}(t)$ counts actual fraud correctly predicted as fraud
+(true positives); $\mathrm{FN}(t)$ counts actual fraud predicted as
+non-fraud (false negatives); $\mathrm{TN}(t)$ counts actual non-fraud
+correctly predicted as non-fraud (true negatives); and
+$\mathrm{FP}(t)$ counts actual non-fraud predicted as fraud
+(false positives). Equivalently:
+\[
+\begin{array}{c|cc}
+ & \widehat Y(t)=1 & \widehat Y(t)=0\\ \hline
+Y=1 & \mathrm{TP}(t) & \mathrm{FN}(t)\\
+Y=0 & \mathrm{FP}(t) & \mathrm{TN}(t)
+\end{array}
+\]
+ The true-positive rate (TPR, also called recall or sensitivity) is $\mathrm{TPR}(t)=\mathrm{TP}(t)/(\mathrm{TP}(t)+\mathrm{FN}(t))$ and false-positive rate (FPR, equal to one minus specificity) is $\mathrm{FPR}(t)=\mathrm{FP}(t)/(\mathrm{FP}(t)+\mathrm{TN}(t))$. These ratios assume nonzero denominators. Precision is $\mathrm{TP}(t)/(\mathrm{TP}(t)+\mathrm{FP}(t))$ when defined; it is \emph{not} FPR. The ROC curve plots $\mathrm{TPR}(t)$ versus $\mathrm{FPR}(t)$ over thresholds. ROC-AUC is the area under this curve; equivalently, for independently sampled positive and negative examples, it is the probability that the positive example scores higher, plus half the probability of a tie \cite{fawcett2006}. ROC-AUC measures discrimination, not calibration.
+
+\subsection{Precision--recall curve and Average Precision}
+Precision and recall at threshold $t$ are
+\begin{equation}\label{eq:pr}\mathrm{Precision}(t)=\frac{\mathrm{TP}(t)}{\mathrm{TP}(t)+\mathrm{FP}(t)},\qquad \mathrm{Recall}(t)=\frac{\mathrm{TP}(t)}{\mathrm{TP}(t)+\mathrm{FN}(t)}.\end{equation}
+With ranked score thresholds and successive recall levels $R_k$, scikit-learn defines \emph{non-interpolated Average Precision} as
+\begin{equation}\label{eq:ap}\mathrm{AP}=\sum_k(R_k-R_{k-1})P_k,\end{equation}
+where $P_k$ is precision at the corresponding operating point \cite{skap}. This is \emph{not} the trapezoidal area under an interpolated precision--recall curve. With rare positives, precision and the precision--recall curve are sensitive to prevalence; the validation prevalence provides a useful no-skill reference, not a guarantee of a particular random sample's AP \cite{saito2015}.
+
+\paragraph{Implementation.} The code below is the corresponding modeling notebook cell, now placed \emph{after} the definitions and mathematical interpretation.
+\begin{lstlisting}
+import numpy as np
+
+from sklearn.metrics import average_precision_score, roc_auc_score
+
+# Separate validation predictors and target
+X_valid = valid_df[BASELINE_FEATURES].copy()
+y_valid = valid_df[TARGET].copy()
+
+# Estimate fraud probabilities using the fitted pipeline
+fraud_class_index = list(
+    baseline_model.classes_
+).index(1)
+
+valid_probabilities = baseline_model.predict_proba(X_valid)[
+    :, fraud_class_index
+]
+
+# Calculate ranking metrics
+validation_ap = average_precision_score(
+    y_valid, valid_probabilities
+)
+
+validation_roc_auc = roc_auc_score(
+    y_valid, valid_probabilities
+)
+
+validation_prevalence = y_valid.mean()
+
+# Compare AP with the prevalence reference
+ap_lift = validation_ap / validation_prevalence
+
+# Verify the probability output
+assert len(valid_probabilities) == len(y_valid)
+assert np.isfinite(valid_probabilities).all()
+assert np.all(
+    (valid_probabilities >= 0)
+    & (valid_probabilities <= 1)
+)
+
+# Report validation results
+print("Validation transactions:", len(y_valid))
+print("Validation fraud cases:", int(y_valid.sum()))
+print(f"Validation fraud prevalence: {validation_prevalence:.6f}")
+print(f"Average Precision (AP): {validation_ap:.6f}")
+print(f"ROC-AUC: {validation_roc_auc:.6f}")
+print(f"AP / prevalence: {ap_lift:.2f}")
+print(
+    "Predicted fraud probability range:",
+    f"[{valid_probabilities.min():.6f}, "
+    f"{valid_probabilities.max():.6f}]"
+)
+\end{lstlisting}
+\paragraph{Observed output.} Validation size $98{,}194$; fraud cases $1{,}080$; prevalence $0.010999$; AP $0.783930$; ROC-AUC $0.992308$; AP/prevalence $71.28$; predicted score range $[0.000014,1.000000]$ when rounded to six decimal places.
+\paragraph{Interpretation and limits.} A ROC-AUC of $0.992308$ indicates exceptionally strong \emph{ranking} on these synthetic validation data. AP $0.783930$ is far above the prevalence reference. Neither figure means that $78.393\%$ of fraud was caught; neither establishes probability calibration. The displayed maximum of $1.000000$ may be a rounded value rather than exactly one. Strong results with only amount and category invite examination of BankSim's synthetic generation mechanisms and future distribution shift.
+
+\section{Classification at the reference threshold 0.5}
+\subsection{The decision rule and confusion matrix}
+\paragraph{Mathematical preparation.} We now choose $t=0.5$ \emph{as a descriptive reference}, not an optimized operating threshold:
+\begin{equation}\label{eq:threshold}\widehat Y_i=\begin{cases}1,&\hat p_i\ge0.5,\\0,&\hat p_i<0.5.\end{cases}\end{equation}
+Comparing $\widehat Y_i$ to $Y_i$ produces four mutually exclusive counts: $\mathrm{TN}$ (actual 0, predicted 0), $\mathrm{FP}$ (actual 0, predicted 1), $\mathrm{FN}$ (actual 1, predicted 0), and $\mathrm{TP}$ (actual 1, predicted 1). The $2\times2$ confusion matrix is
+\begin{equation}\label{eq:cm}\begin{pmatrix}\mathrm{TN}&\mathrm{FP}\\\mathrm{FN}&\mathrm{TP}\end{pmatrix},\end{equation}
+with rows ordered by actual label $0,1$ and columns by predicted label $0,1$. It follows from disjointness of the four cases that their sum equals validation sample size, and $\mathrm{TP}+\mathrm{FN}$ equals the number of actual fraud cases.
+
+\subsection{Deriving the evaluation metrics}
+Precision and recall are as in \eqref{eq:pr}. The F1-score is their harmonic mean,
+\begin{equation}\mathrm{F1}=\frac{2\,\mathrm{Precision}\,\mathrm{Recall}}{\mathrm{Precision}+\mathrm{Recall}}=\frac{2\mathrm{TP}}{2\mathrm{TP}+\mathrm{FP}+\mathrm{FN}},\end{equation}
+when denominators are nonzero. Specificity and false-positive rate are
+\begin{equation}\mathrm{Specificity}=\frac{\mathrm{TN}}{\mathrm{TN}+\mathrm{FP}},\qquad \mathrm{FPR}=\frac{\mathrm{FP}}{\mathrm{TN}+\mathrm{FP}}=1-\mathrm{Specificity}.\end{equation}
+The fraction of \emph{all} transactions flagged is $(\mathrm{TP}+\mathrm{FP})/N$. A high precision and a low false-positive rate can coexist with many missed fraud cases when the positive class is rare. Threshold changes trade off flagged workload and missed fraud; they do not alter the previously calculated ranking metrics for a fixed set of scores.
+
+\paragraph{Implementation.} The following approved notebook cell implements these mathematical definitions on the validation predictions already calculated.
+\begin{lstlisting}
+import numpy as np
+
+from sklearn.metrics import (
+    confusion_matrix,
+    precision_score,
+    recall_score,
+    f1_score
+)
+
+# Define the conventional reference threshold
+REFERENCE_THRESHOLD = 0.5
+
+# Convert validation probabilities into binary predictions
+valid_predictions = (
+    valid_probabilities >= REFERENCE_THRESHOLD
+).astype(int)
+
+# Calculate the confusion matrix
+tn, fp, fn, tp = confusion_matrix(
+    y_valid,
+    valid_predictions,
+    labels=[0, 1]
+).ravel()
+
+# Calculate classification metrics
+precision = precision_score(
+    y_valid, valid_predictions, zero_division=0
+)
+
+recall = recall_score(
+    y_valid, valid_predictions, zero_division=0
+)
+
+f1 = f1_score(
+    y_valid, valid_predictions, zero_division=0
+)
+
+specificity = tn / (tn + fp)
+false_positive_rate = fp / (fp + tn)
+
+# Calculate transaction-flagging statistics
+flagged_transactions = int(valid_predictions.sum())
+flagged_percentage = 100 * flagged_transactions / len(y_valid)
+
+missed_fraud = int(fn)
+
+# Verify consistency of classification counts
+assert tn + fp + fn + tp == len(y_valid)
+assert tp + fn == int(y_valid.sum())
+assert tp + fp == flagged_transactions
+
+# Report results
+print(f"Reference threshold: {REFERENCE_THRESHOLD:.2f}")
+print(f"Validation transactions: {len(y_valid):,}")
+print()
+
+print("Confusion matrix:")
+print(f"True negatives (TN): {tn:,}")
+print(f"False positives (FP): {fp:,}")
+print(f"False negatives (FN): {fn:,}")
+print(f"True positives (TP): {tp:,}")
+print()
+
+print("Classification metrics:")
+print(f"Precision: {precision:.6f}")
+print(f"Recall: {recall:.6f}")
+print(f"F1-score: {f1:.6f}")
+print(f"Specificity: {specificity:.6f}")
+print(f"False-positive rate: {false_positive_rate:.6f}")
+print()
+
+print("Transaction flagging:")
+print(f"Flagged transactions: {flagged_transactions:,}")
+print(f"Flagged percentage: {flagged_percentage:.4f}%")
+print(f"Missed fraud cases: {missed_fraud:,}")
+\end{lstlisting}
+\paragraph{Observed output.} $\mathrm{TN}=97{,}058$, $\mathrm{FP}=56$, $\mathrm{FN}=451$, $\mathrm{TP}=629$; $N=98{,}194$. The counts check: $97{,}058+56+451+629=98{,}194$ and $629+451=1{,}080$.
+\begin{align*}
+\mathrm{Precision}&=\frac{629}{629+56}=0.918248,\\
+\mathrm{Recall}&=\frac{629}{629+451}=0.582407,\\
+\mathrm{F1}&=\frac{2(629)}{2(629)+56+451}=0.712748,\\
+\mathrm{Specificity}&=\frac{97058}{97058+56}=0.999423,\\
+\mathrm{FPR}&=\frac{56}{97058+56}=0.000577,\\
+\mathrm{Flagging\ rate}&=\frac{629+56}{98194}\times100\%=0.6976\%.
+\end{align*}
+\paragraph{Interpretation.} Among 685 flagged transactions, 629 are fraudulent (high precision), but 451 of the 1,080 actual fraud cases are missed (recall $58.24\%$). These are observations at the \emph{reference threshold} only. They do not imply that $0.5$ is optimal for financial loss, customer experience, or investigation capacity.
+
+
+\section{Threshold sensitivity, score distributions, and calibration}
+\subsection{Why threshold selection changes the operating point}
+For a score $S=\hat p(X)$ and threshold $t$, the predicted label is $\hat Y_t=\ind\{S\ge t\}$. Raising $t$ can only shrink the set of flagged transactions, while precision need not change monotonically. In particular,
+\begin{equation}
+\operatorname{TPR}(t)=\Pp(S\ge t\mid Y=1),\quad
+\operatorname{FPR}(t)=\Pp(S\ge t\mid Y=0),\quad
+\operatorname{Precision}(t)=\Pp(Y=1\mid S\ge t).
+\end{equation}
+The threshold $0.5$ is a useful reference but has no automatic operational optimality under class imbalance, asymmetric losses, or finite investigation capacity. The notebook's Sections 4.3.3 and 4.3.4 examined threshold sensitivity and risk-score distributions on validation data.
+\subsection{What calibration means}
+A perfectly calibrated score $S$ satisfies $\E[Y\mid S=s]=s$ (in the conditional-expectation sense). For bins $B_k$ of scores, a reliability diagram compares
+\begin{equation}
+\bar s_k=\frac{1}{n_k}\sum_{i:S_i\in B_k}S_i,\qquad
+\bar y_k=\frac{1}{n_k}\sum_{i:S_i\in B_k}Y_i.
+\end{equation}
+Probability quality and proper scoring rules are treated in \cite{gneiting2007}, while practical calibration of supervised classifiers is examined in \cite{niculescu2005}. Finite-bin reliability diagrams are descriptive: they depend on bin definitions and sample sizes, and cannot prove calibration at every score. The Brier score $n^{-1}\sum_i(S_i-Y_i)^2$ and log loss $-n^{-1}\sum_i[Y_i\log S_i+(1-Y_i)\log(1-S_i)]$ assess probability quality, not just ranking.
+\paragraph{Calibration versus discrimination.} A model can rank transactions well yet systematically overestimate fraud probabilities. Conversely, a nearly constant predictor at the population prevalence can have a small Brier score on an imbalanced sample but poor ranking power. Calibration bins are sensitive to binning and sample counts, particularly in sparsely populated high-score regions. The notebook diagrams are descriptive; they do not establish perfect calibration \cite{niculescu2005,gneiting2007}.
+\begin{figure}[H]\centering\includegraphics[width=.74\linewidth]{mathematical_figures/logistic_calibration.png}\caption{Original validation calibration figure exported from the modeling notebook.}\label{fig:lr-calibration}\end{figure}
+
+\section{Three-action policies and statistical decision theory}
+\subsection{Prediction and action are different mathematical objects}
+Let $\mathcal A=\{A,R,E\}$ denote Approve, Review, and Escalate. The classifier estimates a score $S(X)$; a policy $\delta(S)$ chooses an action. BankSim provides binary fraud labels, not three observed action labels. A two-threshold policy is
+\begin{equation}\label{eq:threeaction}
+\delta(s)=\begin{cases}
+A,&s<\tau_L,\\ R,&\tau_L\le s<\tau_H,\\ E,&s\ge\tau_H.
+\end{cases}\qquad 0\le\tau_L<\tau_H\le1.
+\end{equation}
+\subsection{Bayes risk and its assumptions}
+Suppose $p=\Pp(Y=1\mid X)$ is a calibrated conditional probability and $L(a,y)$ is a known loss for action $a$ and true state $y$. The conditional risk is
+\begin{equation}r(a\mid p)=(1-p)L(a,0)+pL(a,1),\qquad \delta^*(p)\in\arg\min_{a\in\mathcal A}r(a\mid p).\end{equation}
+Each action risk is affine in $p$; the Bayes decision regions are determined by their lower envelope. When $L(a,1)-L(a,0)\ne L(b,1)-L(b,0)$, the crossing of two action risks occurs at
+\begin{equation}\label{eq:cross}
+p_{ab}=\frac{L(b,0)-L(a,0)}{[L(a,1)-L(a,0)]-[L(b,1)-L(b,0)]}.
+\end{equation}
+Not every loss matrix yields three nonempty, ordered decision regions: a candidate crossing may lie outside $[0,1]$, or one action may never minimize conditional risk. Moreover, the model score need not be a calibrated real-world probability. Thus the thresholds used in this project are \emph{validation-derived operational thresholds}, not demonstrated Bayes-optimal cutoffs from known real-world losses.
+\subsection{Worked Bayes-risk example and active decision boundaries}
+For illustration only, consider the normalized loss matrix
+\begin{center}\begin{tabular}{lrr}\toprule Action & $L(a,0)$ & $L(a,1)$\\\midrule Approve & 0 & 100\\ Review & 2 & 20\\ Escalate & 12 & 5\\\bottomrule\end{tabular}\end{center}
+The conditional risks are
+\begin{equation}
+r(A\mid p)=100p,\qquad r(R\mid p)=2+18p,\qquad r(E\mid p)=12-7p.
+\end{equation}
+The Approve--Review crossing is $p=2/82\approx0.02439$, while the Review--Escalate crossing is $p=10/25=0.4$. The Approve--Escalate crossing is $12/107\approx0.11215$, but it is \emph{not} an active Bayes boundary: Review has lower risk there.
+\begin{proposition}[Three nonempty ordered regions in this example]
+The Bayes action is Approve for $0\le p<2/82$, Review for $2/82<p<0.4$, and Escalate for $0.4<p\le1$, with ties at the boundaries.
+\end{proposition}
+\begin{proof} Compare the three affine risks on the intervals determined by their pairwise intersections. At $p=0$, Approve minimizes risk; at $p=0.1$, Review does; and at $p=1$, Escalate does. The two active intersections are $2/82$ and $0.4$, and the remaining intersection lies strictly above the lower envelope.\end{proof}
+These illustrative Bayes thresholds are \emph{not} the thresholds fitted for the project. The latter were determined by validation-score ranks and operational reference capacities; they do not follow from the example loss matrix.
+
+\subsection{Capacity constraints and ranking}
+With review and escalation capacity limits $K_R,K_E$, one may formulate
+\begin{equation}\min_{\delta_1,\ldots,\delta_n}\sum_{i=1}^n r(\delta_i\mid p_i)\quad\text{subject to}\quad\sum_i\ind\{\delta_i=R\}\le K_R,\quad\sum_i\ind\{\delta_i=E\}\le K_E.\end{equation}
+A fixed score threshold and a top-$K$ ranking rule are distinct: fixed thresholds permit action counts to vary with the score distribution, whereas top-$K$ fixes the number selected (up to ties and eligibility rules). Their performance should not be conflated.
+\subsection{Frozen validation policy}
+\begin{figure}[H]\centering
+\begin{tikzpicture}[x=12cm,y=1cm]
+\fill[green!20] (0,0) rectangle (.07635097,.42);
+\fill[yellow!30] (.07635097,0) rectangle (.57319984,.42);
+\fill[red!18] (.57319984,0) rectangle (1,.42);
+\draw (0,0) rectangle (1,.42);
+\draw (.07635097,0)--(.07635097,.42);\draw (.57319984,0)--(.57319984,.42);
+\node[font=\scriptsize,rotate=90] at (.038,.21) {Approve};
+\node at (.32,.21) {Review};\node at (.78,.21) {Escalate};
+\node[below,font=\scriptsize] at (.07635097,0) {$\tau_L$};\node[below,font=\scriptsize] at (.57319984,0) {$\tau_H$};
+\end{tikzpicture}
+\caption{Schematic of the validation-derived three-action policy; interval widths reflect the score thresholds, not observed action frequencies.}\label{fig:policy-bands}\end{figure}
+
+After validation development, the selected RF-3 policy used
+\begin{equation}\tau_L=0.07635097141364822,\qquad\tau_H=0.5731998416519604.\end{equation}
+\begin{center}\begin{tabular}{lrr}\toprule Action & Validation transactions & Percentage \\\midrule Approve&96,398&98.171\%\\Review&1,111&1.131\%\\Escalate&685&0.698\%\\\bottomrule\end{tabular}\end{center}
+The percentages are descriptive, rounded values. The thresholds were frozen before test evaluation. In the executed notebook, the upper cutoff was the 685th largest validation RF-3 score and the lower cutoff the 1,796th largest score. The target counts were realized on validation; ties at the cutoff can in general alter exact counts. On test, the unchanged cutoffs yielded different workloads.
+
+\section{Random Forests, complexity control, and model comparison}
+\noindent\textit{Why this comparison?} Logistic Regression assumes an
+additive linear structure on the log-odds scale. Random Forests
+offer a flexible alternative that can learn nonlinear split
+patterns and interactions from the same tabular predictors.
+Depth and minimum-leaf constraints were varied to examine
+overfitting and probability quality, not to claim an exhaustive
+hyperparameter search \cite{breiman2001,hastie2009}.
+
+\subsection{Tree and forest probability estimators}
+Following the Random Forest framework of \cite{breiman2001}, for a classification tree with terminal leaf $\ell(x)$, the empirical leaf probability is
+\begin{equation}\hat p_{\rm tree}(x)=\frac{\sum_{i:X_i\in\ell(x)}Y_i}{\#\{i:X_i\in\ell(x)\}}.\end{equation}
+For a forest of $B$ trees, the usual class-probability prediction is the average of individual tree predictions:
+\begin{equation}\hat p_{\rm RF}(x)=\frac1B\sum_{b=1}^B\hat p_b(x).\end{equation}
+Bootstrap sampling and random feature subsets encourage diversity among trees \cite{breiman2001}. Maximum depth and minimum leaf size control complexity and can influence both discrimination and probability quality. Unlike a convex logistic-regression objective, random-forest fitting is a greedy, randomized ensemble procedure; there is no single globally optimized differentiable objective of the same form.
+\subsection{How classification trees select splits}
+For a node $t$ containing $n_t$ labeled examples, let $\hat\pi_{t,k}$ denote the empirical fraction in class $k\in\{0,1\}$. The Gini impurity is
+\begin{equation}G(t)=1-\sum_{k=0}^{1}\hat\pi_{t,k}^{\,2}=2\hat\pi_{t,1}(1-\hat\pi_{t,1}).\end{equation}
+A candidate split into left and right children is evaluated through the weighted decrease
+\begin{equation}\Delta G=G(t)-\frac{n_L}{n_t}G(t_L)-\frac{n_R}{n_t}G(t_R).\end{equation}
+A greedy tree chooses a permitted split maximizing $\Delta G$ (subject to its feature and sample constraints). For example, a node with 10 fraud and 90 non-fraud observations has $G=2(0.1)(0.9)=0.18$. If a proposed split produces one child with 8 fraud and 12 non-fraud observations and another with 2 fraud and 78 non-fraud observations, the weighted post-split impurity is $0.2(0.48)+0.8(0.04875)=0.135$, yielding $\Delta G=0.045$.
+
+In the fitted forest, each tree is trained with bootstrap sampling and considers a random subset of candidate predictors at each split. The \texttt{max\_depth} limit restricts path length; \texttt{min\_samples\_leaf} prevents very small terminal nodes. These are regularization mechanisms, not guarantees of calibrated probabilities or external generalization.
+
+\subsection{Observed validation comparison}
+The following table and figures compare the candidate models on the same chronological validation partition. The charts show discrete model configurations rather than points on a continuous parameter scale.
+\begin{table}[H]\centering\small\begin{tabular}{lrrrr}\toprule Model & AP $\uparrow$ & ROC-AUC $\uparrow$ & Brier $\downarrow$ & Log loss $\downarrow$\\\midrule
+Logistic regression&0.783930&0.992308&0.004312&0.016985\\
+RF-0 (unrestricted)&0.708612&0.908137&0.005720&0.084423\\
+RF-1&0.792198&0.991686&0.004142&0.016680\\
+RF-2&0.805055&0.992544&\textbf{0.004003}&\textbf{0.015751}\\
+RF-3 (selected)&\textbf{0.807737}&\textbf{0.992853}&0.004038&0.015968\\
+RF-4&0.803650&0.992634&0.004108&0.016025\\
+RF-5&0.797432&0.992811&0.004258&0.016543\\\bottomrule\end{tabular}\caption{Actual chronological-validation metrics from the completed modeling notebook.}\label{tab:validation-models}\end{table}
+\begin{figure}[H]\centering\includegraphics[width=.85\linewidth]{mathematical_figures/validation_ap_v2.png}\caption{Discrete-model comparison of Average Precision; reconstructed from the notebook's exact validation summary values.}\end{figure}
+\begin{figure}[H]\centering\includegraphics[width=.85\linewidth]{mathematical_figures/validation_brier_v2.png}\caption{Discrete-model comparison of Brier score; reconstructed from the notebook's validation summary values.}\end{figure}
+\subsection{Why RF-3 was selected, and what was traded off}
+RF-3 has the highest validation AP and ROC-AUC among the tested configurations. RF-2 has the lowest validation Brier score and log loss. Thus RF-3 is a discrimination-focused selection, \emph{not} a uniform winner on every metric. The regularized RF-3 uses 200 trees, maximum depth 10, minimum leaf size 20, $\texttt{max\_features}=\texttt{sqrt}$, and random state 42. The unrestricted RF-0 averaged approximately 2,245.59 leaves per tree, versus 106.605 for RF-3. These are empirical complexity summaries, not universal bounds on generalization error.
+\begin{figure}[H]\centering\includegraphics[width=.68\linewidth]{mathematical_figures/model_calibration_comparison.png}\caption{Original comparative validation calibration figure exported from the modeling notebook.}\end{figure}
+
+\FloatBarrier
+\section{Final evaluation on the reserved chronological test partition}
+\subsection{Protocol and predictive results}
+The test partition consists of simulation steps 153--179: $n=100{,}117$ transactions, including 1,080 labeled fraud cases and 99,037 non-fraud cases. The model and thresholds were frozen before evaluating this partition.
+\begin{center}\begin{tabular}{lr}\toprule Metric & RF-3 test result\\\midrule Average Precision&0.804028\\ROC-AUC&0.992570\\Brier score&0.003996\\Log loss&0.015835\\Fraud prevalence&0.010787\\\bottomrule\end{tabular}\end{center}
+\subsection{Action-by-outcome analysis}
+\begin{table}[H]\centering\begin{tabular}{lrrr}\toprule Action & Non-fraud & Fraud & Total\\\midrule Approve&98,191&200&98,391\\Review&825&271&1,096\\Escalate&21&609&630\\\midrule Total&99,037&1,080&100,117\\\bottomrule\end{tabular}\caption{Actual final test outcomes under the frozen RF-3 policy.}\label{tab:test-actions}\end{table}
+Define the intervention set $I=\{i:\delta(S_i)\in\{R,E\}\}$. Then
+\begin{align}
+\operatorname{FraudCoverage}&=\frac{271+609}{1080}=\frac{880}{1080}\approx0.81481,\\
+\operatorname{InterventionRate}&=\frac{1096+630}{100117}=\frac{1726}{100117}\approx0.01724,\\
+\operatorname{InterventionPrecision}&=\frac{880}{1726}\approx0.50985,\\
+\operatorname{EscalationPrecision}&=\frac{609}{630}\approx0.96667.
+\end{align}
+There were 846 legitimate interventions ($825+21$) and 200 fraudulent transactions assigned Approve. These counts are \emph{routing outcomes}; they do not establish that fraud was stopped or losses avoided.
+\begin{figure}[H]\centering\includegraphics[width=.78\linewidth]{mathematical_figures/test_action_outcomes_v2.png}\caption{Grouped test action-by-outcome counts (logarithmic vertical axis), reconstructed from the saved test action table.}\end{figure}
+\subsection{Fixed thresholds versus realized workload}
+\begin{center}\begin{tabular}{lrr}\toprule Action & Validation count & Test count\\\midrule Approve&96,398&98,391\\ Review&1,111&1,096\\ Escalate&685&630\\\bottomrule\end{tabular}\end{center}
+The same two numerical thresholds were used for both partitions. Validation capacities informed their selection, but the test action counts emerged from the new score distribution. Hence the thresholds do not impose hard workload limits on future batches.
+
+\subsection{Hypothetical economic sensitivity}
+Let $c(a,y)$ represent an assumed cost of action $a$ when the true label is $y$. A scenario total is
+\begin{equation}C=\sum_{i=1}^{n_{\rm test}}c(\delta(S_i),Y_i).\end{equation}
+For the actual test action counts, the notebook's cost convention is
+\begin{equation}\label{eq:cost-components}
+C=C_F F_A+C_R N_R+rC_F F_R+C_E(N_E-F_E)+eC_F F_E,
+\end{equation}
+where $F_A,F_R,F_E$ are fraud counts in Approve, Review, Escalate, and $N_R,N_E$ are total review and escalation counts. Here $r$ and $e$ are assumed residual fractions of fraud loss after the corresponding interventions. This expression charges $C_E$ only for legitimate escalations, as implemented in the notebook; it is a stylized convention, not a general operational accounting identity.
+\begin{center}\begin{tabular}{lrrrrr}\toprule Scenario & $C_F$ & $C_R$ & $C_E$ & $r$ & $e$\\\midrule A: Review effective &100&1&5&0.10&0.05\\ B: Review less effective &100&2&5&0.50&0.05\\ C: Escalation costly &100&2&30&0.20&0.05\\\bottomrule\end{tabular}\end{center}
+For example, Scenario A gives
+\[
+100(200)+1(1096)+0.10(100)(271)+5(21)+0.05(100)(609)=26{,}956.
+\]
+The other scenarios follow from the same counts and formula, with their respective assumed parameters. All costs are hypothetical normalized units.
+
+The notebook explored three distinct hypothetical cost scenarios; their reported totals were 26,956 (A: Review effective), 38,892 (B: Review less effective), and 31,287 (C: Escalation costly), in normalized units. These numbers are conditional on the notebook's assumptions and \emph{are not} measured financial savings.
+\begin{figure}[H]\centering\includegraphics[width=.72\linewidth]{mathematical_figures/test_cost_scenarios.png}\caption{Hypothetical scenario totals from the final test evaluation; chart reconstructed from reported values.}\end{figure}
+\subsection{What the test results can and cannot support}
+The reserved test provides evidence of discrimination and operational prioritization under the synthetic BankSim distribution. It does not establish external validity, real-world probability calibration, causal intervention effectiveness, or live banking readiness. Repeatedly selecting policies based on test performance would invalidate its role as a reserved evaluation partition.
+
+\section{Reproducible inference, monitoring, and limitations}
+The saved scikit-learn pipeline is \texttt{models/rf3\_pipeline.joblib}; the separate frozen policy is \texttt{models/rf3\_policy.json}. The local batch program \texttt{src/predict.py} accepts a CSV containing \texttt{amount} and \texttt{category}, validates the input, predicts scores, and assigns actions according to Equation~\eqref{eq:threeaction}. Five sample transactions were processed; the standalone scores agreed with the original notebook scores within strict floating-point tolerances and their actions matched exactly. This is a five-record reproducibility check, not a comprehensive software certification.
+\subsection{Monitoring framework}
+Input-quality monitoring should detect missing or invalid values and unfamiliar categories. Distribution monitoring should compare incoming amount and category frequencies with reference data. Score and workload monitoring can be immediate; AP, calibration, and fraud coverage require delayed, reliable labels. Threshold governance should distinguish model changes from policy changes and record each version.
+\subsection{Educational synthesis}
+A complete pipeline separates four questions: \emph{What is the target conditional probability?} (statistical model), \emph{How well does the fitted score rank and quantify risk?} (validation), \emph{Which actions are justified by assumptions and constraints?} (decision theory), and \emph{What actually happens after intervention?} (causal and operational evaluation). Conflating these questions leads to overconfident claims.
+
+
+\section{Principal findings, contributions, limitations, and conclusions}
+\subsection{What the experiments established}
+The supervised binary formulation was appropriate to the labeled
+BankSim response, while the three-action policy was correctly
+treated as a separate downstream decision layer. On chronological
+validation, RF-3 achieved the highest Average Precision
+(0.807737) and ROC-AUC (0.992853) among the seven evaluated
+models (Logistic Regression and RF-0--RF-5). RF-2 instead had
+the lowest Brier score (0.004003) and log loss (0.015751).
+Thus RF-3 was selected for \emph{ranking discrimination}, not
+because it dominated every measure of probability quality.
+
+With the RF-3 model and thresholds frozen, the reserved
+chronological test yielded Average Precision 0.804028,
+ROC-AUC 0.992570, Brier score 0.003996, and log loss
+0.015835. The policy routed 880 of 1,080 fraud-labeled
+transactions (81.48\%) to Review or Escalate, while assigning
+1,726 of 100,117 transactions (1.72\%) to those actions.
+It also assigned 200 labeled fraud transactions to Approve
+and 846 non-fraud transactions to intervention. These
+trade-offs are essential to interpreting the result: the
+policy neither captures every fraud case nor avoids all
+unnecessary interventions.
+
+\subsection{What this project contributes}
+The principal contribution is a reproducible, documented
+\emph{case study}, not a new ML method: a CRISP-DM-aligned
+problem formulation; data-type-aware, training-only
+preprocessing; an interpretable baseline and controlled
+forest comparison; discrimination and probability-quality
+assessment; validation-derived, fixed three-action
+thresholds; reserved test evaluation; and a standalone
+inference interface. The mathematical derivations and
+project outputs distinguish literature-supported principles,
+project-specific design choices, and empirical findings.
+
+\subsection{Limits and next steps}
+BankSim is synthetic and may have simulation artifacts;
+the feature set is deliberately restricted to amount and
+category. Temporal ordering of simulation steps does not
+establish real-world temporal transferability. Reliability
+plots and proper scoring rules on BankSim do not prove
+calibration for real banking transactions. The intervention
+outcomes are simulated \emph{routing decisions}, not
+observed prevention effects. The cost scenarios are
+assumption-dependent normalized quantities, not verified
+financial savings. Future evaluation should use a
+separate dataset or operationally representative data,
+assess drift, leakage, calibration, subgroup performance,
+and delayed labels, and estimate genuine intervention
+effects and costs before any live deployment.
+
+\paragraph{Conclusion.}
+The study demonstrates that a carefully evaluated,
+limited-feature supervised classifier can support
+selective fraud-risk prioritization \emph{within the
+BankSim simulation}. Its broader lesson is methodological:
+the problem definition, data types, split design,
+model comparison, probability assessment, decision
+policy, and final test must be justified separately
+and then connected in one reproducible workflow.
+
+\section{Questions for mathematical understanding and independent study}
+\begin{enumerate}
+\item Why is the response binary when the platform has three possible actions? Distinguish observed labels, model probabilities, and policy actions.
+\item Why use a logistic rather than a linear probability model? Derive the logit and logistic inverse.
+\item Where do cross-entropy and maximum likelihood come from? Derive them from the Bernoulli probability mass function.
+\item Why is logistic loss convex? Prove that the Hessian is positive semidefinite.
+\item What does $\beta_1$ mean when amount is standardized? Explain odds ratios and scaling.
+\item Why can all one-hot indicators plus an intercept create collinearity? Explain how regularization affects coefficients.
+\item What is learned by \texttt{fit}, and what must not be learned from validation data?
+\item What do AP and ROC-AUC measure? Why is AP not simply trapezoidal PR-AUC?
+\item Why can AP be high while recall at threshold 0.5 is only 58.24\%?
+\item Why should the final test set remain untouched until development decisions are frozen?
+\end{enumerate}
+
+\section*{Reference notes}
+ISLP notation and classification framing are used throughout \cite{james2023}. The algebraic proofs in this document are worked derivations of standard results, not claims of original research. The numerical findings are taken from the executed BankSim notebook; references support the methods, not the specific BankSim outputs. The approved Python excerpts are taken from \texttt{notebooks/03\_modeling.ipynb} (Sections 4.2, 4.3.1, and 4.3.2), preserving the original statements and parameters. They are excerpts of sequential notebook cells, not a complete standalone script. The project environment specifies scikit-learn 1.5.1; the API links below use the 1.5 documentation family rather than the evolving stable branch. No model was retrained to produce this document.
+\begin{thebibliography}{99}
+\setlength{\itemsep}{4pt}
+% Alphabetical by the family name of the first author; institutional authors under S.
+\bibitem{berger1985}
+J. O. Berger, \emph{Statistical Decision Theory and Bayesian Analysis},
+2nd ed., Springer, 1985.
+\url{https://doi.org/10.1007/978-1-4757-4286-2}.
+
+\bibitem{breiman2001}
+L. Breiman, ``Random forests,'' \emph{Machine Learning},
+45, pp. 5--32, 2001.
+\url{https://doi.org/10.1023/A:1010933404324}.
+
+\bibitem{chapman2000}
+P. Chapman et al., \emph{CRISP-DM 1.0: Step-by-Step Data Mining Guide},
+CRISP-DM Consortium, 2000.
+
+\bibitem{fawcett2006}
+T. Fawcett, ``An introduction to ROC analysis,''
+\emph{Pattern Recognition Letters}, 27(8), pp. 861--874, 2006.
+\url{https://doi.org/10.1016/j.patrec.2005.10.010}.
+
+\bibitem{gneiting2007}
+T. Gneiting and A. E. Raftery, ``Strictly proper scoring rules,
+prediction, and estimation,'' \emph{Journal of the American Statistical Association},
+102(477), pp. 359--378, 2007.
+\url{https://doi.org/10.1198/016214506000001437}.
+
+\bibitem{hastie2009}
+T. Hastie, R. Tibshirani, and J. Friedman,
+\emph{The Elements of Statistical Learning: Data Mining, Inference, and Prediction},
+2nd ed., Springer, 2009.
+\url{https://doi.org/10.1007/978-0-387-84858-7}.
+
+\bibitem{james2023}
+G. James, D. Witten, T. Hastie, R. Tibshirani, and J. Taylor,
+\emph{An Introduction to Statistical Learning: with Applications in Python},
+Springer, 2023.
+\url{https://doi.org/10.1007/978-3-031-38747-0}.
+
+\bibitem{lopezrojas2014}
+E. A. L\'opez-Rojas, A. Elmir, and S. Axelsson,
+``BankSim: A bank payments simulator for fraud detection research,''
+\emph{Proceedings of the 26th European Modeling and Simulation Symposium
+(EMSS)}, 2014.
+
+\bibitem{mccullagh1989}
+P. McCullagh and J. A. Nelder, \emph{Generalized Linear Models},
+2nd ed., Chapman \& Hall, 1989.
+
+\bibitem{niculescu2005}
+A. Niculescu-Mizil and R. Caruana,
+``Predicting good probabilities with supervised learning,''
+\emph{Proceedings of the 22nd International Conference on Machine Learning},
+pp. 625--632, 2005.
+\url{https://doi.org/10.1145/1102351.1102430}.
+
+\bibitem{nocedal2006}
+J. Nocedal and S. J. Wright, \emph{Numerical Optimization},
+2nd ed., Springer, 2006.
+\url{https://doi.org/10.1007/978-0-387-40065-5}.
+
+\bibitem{saito2015}
+T. Saito and M. Rehmsmeier,
+``The precision-recall plot is more informative than the ROC plot
+when evaluating binary classifiers on imbalanced datasets,''
+\emph{PLOS ONE}, 10(3), e0118432, 2015.
+\url{https://doi.org/10.1371/journal.pone.0118432}.
+
+\bibitem{skap}
+scikit-learn developers, \emph{average\_precision\_score documentation},
+version 1.5 documentation.
+\url{https://scikit-learn.org/1.5/modules/generated/sklearn.metrics.average_precision_score.html}.
+
+\bibitem{sklogreg}
+scikit-learn developers, \emph{LogisticRegression documentation},
+version 1.5 documentation.
+\url{https://scikit-learn.org/1.5/modules/generated/sklearn.linear_model.LogisticRegression.html}.
+
+\bibitem{skonehot}
+scikit-learn developers, \emph{OneHotEncoder documentation},
+version 1.5 documentation.
+\url{https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.OneHotEncoder.html}.
+
+\bibitem{skstandard}
+scikit-learn developers, \emph{StandardScaler documentation},
+version 1.5 documentation.
+\url{https://scikit-learn.org/1.5/modules/generated/sklearn.preprocessing.StandardScaler.html}.
+\end{thebibliography}
+\end{document}
