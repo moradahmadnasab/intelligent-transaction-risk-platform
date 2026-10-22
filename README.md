@@ -98,8 +98,8 @@ The policy routed **880 / 1,080 = 81.48%** of observed fraud cases to **Review o
 | `src/predict.py` | Standalone CSV batch-inference program |
 | `models/rf3_policy.json` | Frozen validation-derived decision-policy thresholds |
 | `reports/` | Final test metrics, action table, policy summary, and cost scenarios |
-| `examples/sample_transactions.csv` | Example transactions for local inference |
-| `examples/sample_predictions.csv` | Example prediction outputs |
+| `data/sample/sample_transactions.csv` | Example input transactions for local inference |
+| `data/sample/sample_predictions.csv` | Example fraud-risk scores and recommended actions |
 | `requirements.txt` | Python dependencies |
 
 **Model artifact availability:** The fitted Random Forest pipeline, `models/rf3_pipeline.joblib`, is maintained locally and is not distributed in the current repository. Reproducing standalone inference requires a compatible locally trained pipeline and the published decision-policy JSON file.
