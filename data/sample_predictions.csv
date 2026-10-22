@@ -1,0 +1,11 @@
+amount,category,fraud_risk_score,recommended_action
+11.65,'es_transportation',9.350012208432721e-05,Approve
+1.6,'es_transportation',9.350012208432721e-05,Approve
+33.36,'es_transportation',9.350012208432721e-05,Approve
+8.01,'es_transportation',9.350012208432721e-05,Approve
+38.11,'es_transportation',9.350012208432721e-05,Approve
+66.43,'es_transportation',0.00010648300759719298,Approve
+10.24,'es_transportation',9.350012208432721e-05,Approve
+24.52,'es_transportation',9.350012208432721e-05,Approve
+27.8,'es_sportsandtoys',0.1251651215780721,Review
+66.94,'es_transportation',0.00010648300759719298,Approve
