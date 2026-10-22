@@ -83,22 +83,28 @@ The policy routed **880 / 1,080 = 81.48%** of observed fraud cases to **Review o
 
 | Path | Purpose |
 |---|---|
-| `README.md` | Project overview, results, and usage notes |
+| `README.md` | Project overview, experimental results, and usage instructions |
 | `docs/01_business_understanding.md` | Business problem, objectives, assumptions, and scope |
-| `docs/02_data_understanding.md` | BankSim structure, exploration, and quality verification |
-| `docs/03_data_preparation.md` | Chronological split, feature selection, and preprocessing |
-| `docs/04_modeling.md` | Model comparisons, selection, and decision policy |
-| `docs/05_evaluation.md` | Reserved-test metrics, policy outcomes, and cost scenarios |
+| `docs/02_data_understanding.md` | BankSim dataset structure, exploration, and data-quality verification |
+| `docs/03_data_preparation.md` | Chronological splitting, feature selection, and preprocessing |
+| `docs/04_modeling.md` | Model comparisons, selection, and decision-policy development |
+| `docs/05_evaluation.md` | Reserved-test metrics, policy outcomes, and illustrative cost scenarios |
 | `docs/06_deployment.md` | Standalone batch-inference design and limitations |
-| `docs/` (Mathematical Foundations subfolder) | Technical report, LaTeX source, and supporting figures |
-| `notebooks/03_modeling.ipynb` | Modeling and evaluation notebook |
+| [Mathematical Foundations report (PDF)](docs/mathematical_foundations_consolidated_source/07_mathematical_foundations_consolidated_release.pdf) | Mathematical formulation, evaluation metrics, methodological rationale, and limitations |
+| [Mathematical Foundations source (LaTeX)](docs/mathematical_foundations_consolidated_source/07_mathematical_foundations_consolidated_release.tex) | LaTeX source, with supporting figures in the same directory |
+| `notebooks/01_data_understanding.ipynb` | Exploratory analysis and dataset understanding |
+| `notebooks/02_data_preparation.ipynb` | Data preparation and feature-processing workflow |
+| `notebooks/03_modeling.ipynb` | Model training, comparison, and evaluation |
 | `src/predict.py` | Standalone CSV batch-inference program |
-| `models/rf3_policy.json` | Frozen decision-policy thresholds |
-| `models/rf3_pipeline.joblib` | Locally saved fitted pipeline; **ignored by Git by default** |
-| `reports/` | Saved final test metrics, action table, policy summary, and cost scenarios |
+| `models/rf3_policy.json` | Frozen validation-derived decision-policy thresholds |
+| `reports/` | Final test metrics, action table, policy summary, and cost scenarios |
+| `examples/sample_transactions.csv` | Example transactions for local inference |
+| `examples/sample_predictions.csv` | Example prediction outputs |
 | `requirements.txt` | Python dependencies |
 
-The Mathematical Foundations report discusses the classification problem, model formulation, evaluation metrics, methodological rationale, and limitations in greater mathematical detail.
+**Model artifact availability:** The fitted Random Forest pipeline, `models/rf3_pipeline.joblib`, is maintained locally and is not distributed in the current repository. Reproducing standalone inference requires a compatible locally trained pipeline and the published decision-policy JSON file.
+
+The Mathematical Foundations report provides additional theoretical discussion of the classification problem, model formulation, evaluation metrics, methodological choices, and limitations.
 
 ## Reproducibility and local usage
 
