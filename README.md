@@ -91,6 +91,7 @@ The policy routed **880 / 1,080 = 81.48%** of observed fraud cases to **Review o
 | `docs/05_evaluation.md` | Reserved-test metrics, policy outcomes, and illustrative cost scenarios |
 | `docs/06_deployment.md` | Standalone batch-inference design and limitations |
 | [Mathematical Foundations report (PDF)](docs/mathematical_foundations_consolidated_source/07_mathematical_foundations_consolidated_release.pdf) | Mathematical formulation, evaluation metrics, methodological rationale, and limitations |
+| [Mathematical Foundations source (LaTeX)](docs/mathematical_foundations_consolidated_source/07_mathematical_foundations_consolidated_release.tex) | LaTeX source, with supporting figures in the same directory |
 | `notebooks/01_data_understanding.ipynb` | Exploratory analysis and dataset understanding |
 | `notebooks/02_data_preparation.ipynb` | Data preparation and feature-processing workflow |
 | `notebooks/03_modeling.ipynb` | Model training, comparison, and evaluation |
