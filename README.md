@@ -144,7 +144,7 @@ The current `.gitignore` excludes `models/*.joblib`, so **cloning the repository
 When the model and policy are available, and the example input file exists, run from the project root:
 
 ```bash
-python src/predict.py --input examples/sample_transactions.csv --output examples/sample_predictions.csv
+python src/predict.py --input data/sample/sample_transactions.csv --output data/sample/sample_predictions.csv
 ```
 
 The input CSV must include `amount` and `category`. The program outputs model-generated fraud-risk scores and recommended actions. The local five-transaction inference check reported agreement with the notebook's predictions and policy assignments; it does not establish broader deployment readiness.
