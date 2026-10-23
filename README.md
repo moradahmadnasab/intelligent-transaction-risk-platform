@@ -128,7 +128,11 @@ The raw CSV is **not included in the Git repository**. The Data Understanding do
 
 ### 3. Reproduce the analysis
 
-Consult `notebooks/03_modeling.ipynb` and the CRISP-DM documents for the modeling and evaluation workflow. The notebook's actual execution order, expected working directory, and artifact-writing cells should be checked before treating it as a one-command end-to-end training script.
+The modeling workflow is documented in `notebooks/03_modeling.ipynb`, together with the corresponding CRISP-DM documentation.
+
+The notebook was successfully executed from a restarted Jupyter kernel using **Run All**, with the working directory set to the repository's `notebooks/` folder. It uses project-relative paths to load the dataset and save the trained RF-3 pipeline, decision-policy JSON, and sample inference artifacts.
+
+To reproduce the results, first install the required dependencies and place the BankSim dataset at the documented location. Then open `notebooks/03_modeling.ipynb` in Jupyter and execute its cells sequentially.
 
 ### 4. Run standalone inference with a locally available trained model
 
